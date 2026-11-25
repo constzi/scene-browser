@@ -10,8 +10,8 @@
   It signs in to Google in your browser and reads the scene MP3s straight from
   your Google Drive folder. Stars and notes are read from / written to
   _scene-browser/stars-and-notes.json in that folder (same file as the desktop app).
-  The Google client ID and Drive folder ID are entered on the device and kept in
-  that browser's local storage.
+  The Google client ID and Drive folder ID default to the owner's (see DEFAULT_*
+  below) and can be changed on a device with the gear button.
 -->
 <style>
 :root{--bg:#17181b;--panel:#1f2125;--line:#2e3137;--text:#e8e6e1;--dim:#9a9ca3;--acc:#ff8a1f;--acc2:#ffb066;--sel:#2b2e35;--ok:#7bd88f;--warn:#e6c35c;--sab:env(safe-area-inset-bottom,0px)}
@@ -133,7 +133,11 @@ const SCOPE='https://www.googleapis.com/auth/drive';
 const API='https://www.googleapis.com/drive/v3/files', UP='https://www.googleapis.com/upload/drive/v3/files';
 const STATE_DIR='_scene-browser', STATE_NAME='stars-and-notes.json';
 const SILENT='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
-let cfg={client:LS.get('client',''),folder:LS.get('folder','')};
+// Defaults so the plain address works on any device. Neither is a secret: the client ID
+// only works from this site, and the folder can only be read after its owner signs in.
+const DEFAULT_CLIENT='315511578613-gerluv9r1dkrgbj4dbl55ev4krrcgo83.apps.googleusercontent.com';
+const DEFAULT_FOLDER='1VbVRVWjkWYa3qtOZ5x_DUlz9b2lEwHuZ';
+let cfg={client:LS.get('client','')||DEFAULT_CLIENT,folder:LS.get('folder','')||DEFAULT_FOLDER};
 let token=null, tokenClient=null, tokenWaiters=[];
 let projects=[], view=[], sel=null, filter='all', cur=null, unlocked=false;
 let state={stars:{},notes:{}}, stateId=LS.get('stateId',''), saveChain=Promise.resolve();
