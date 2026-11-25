@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17181b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="robots" content="noindex">
+<title>Scene Browser</title>
+<!--
+  Scene Browser (phone / web). A static page: no server, no data in this file.
+  It signs in to Google in your browser and reads the scene MP3s straight from
+  your Google Drive folder. Stars and notes are read from / written to
+  _scene-browser/stars-and-notes.json in that folder (same file as the desktop app).
+  The Google client ID and Drive folder ID are entered on the device and kept in
+  that browser's local storage.
+-->
+<style>
+:root{--bg:#17181b;--panel:#1f2125;--line:#2e3137;--text:#e8e6e1;--dim:#9a9ca3;--acc:#ff8a1f;--acc2:#ffb066;--sel:#2b2e35;--ok:#7bd88f;--warn:#e6c35c;--sab:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:16px/1.4 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;display:flex;flex-direction:column;overflow:hidden}
+button{font:inherit;color:inherit;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 13px;cursor:pointer}
+button.primary{background:var(--acc);border-color:var(--acc);color:#1a1205;font-weight:600}
+button:disabled{opacity:.4}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+input[type=text],input[type=search],textarea{font:inherit;color:var(--text);background:#121316;border:1px solid var(--line);border-radius:8px;padding:10px 11px;width:100%}
+header{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
+header h1{font-size:16px;margin:0;font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header button{padding:7px 10px;font-size:14px}
+main{flex:1;display:flex;min-height:0;position:relative}
+#left{flex:1;display:flex;flex-direction:column;min-width:0}
+#filters{padding:10px 12px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--line)}
+.chips{display:flex;gap:6px;align-items:center}
+.chip{font-size:13px;padding:5px 12px;border-radius:999px}
+.chip.on{background:var(--acc);border-color:var(--acc);color:#1a1205;font-weight:600}
+.count{color:var(--dim);font-size:12px;margin-left:auto}
+#list{list-style:none;margin:0;padding:0;overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch}
+#list li{display:flex;align-items:center;gap:6px;padding:0 6px 0 2px;border-bottom:1px solid #23252a}
+#list li.sel{background:var(--sel);box-shadow:inset 3px 0 0 var(--acc)}
+#list .row{flex:1;min-width:0;display:flex;align-items:center;gap:8px;background:none;border:none;border-radius:0;text-align:left;padding:13px 6px}
+#list .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#list .ct{font-size:12px;color:var(--dim);white-space:nowrap}
+.star{background:none;border:none;padding:10px 8px;font-size:19px;color:#555a63;line-height:1}
+.star.on{color:var(--warn)}
+#detail{position:absolute;inset:0;background:var(--bg);display:none;flex-direction:column;z-index:2}
+body.open #detail{display:flex}
+#dhead{display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line)}
+#dbody{flex:1;overflow-y:auto;padding:14px;-webkit-overflow-scrolling:touch}
+#dbody h2{margin:0 0 12px;font-size:19px;font-weight:600;word-break:break-word}
+.scenes{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:8px;margin-bottom:18px}
+.scene{display:flex;align-items:center;gap:8px;text-align:left;padding:13px 11px}
+.scene .ic{width:16px;color:var(--dim)}
+.scene.playing{border-color:var(--acc);background:#2c2418}
+.scene.playing .ic{color:var(--acc)}
+.scene small{color:var(--dim);margin-left:auto;font-size:11px}
+label.small{display:block;font-size:13px;color:var(--dim);margin-bottom:5px}
+textarea{min-height:90px;resize:vertical}
+.saved{font-size:12px;color:var(--dim);min-height:18px;margin-top:4px}
+#player{border-top:1px solid var(--line);background:var(--panel);padding:8px 12px calc(8px + var(--sab));display:flex;flex-direction:column;gap:6px}
+#player .top{display:flex;align-items:center;gap:8px}
+#player .top button{padding:9px 13px;min-width:46px}
+#now{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#now span{color:var(--dim)}
+#player .bot{display:flex;align-items:center;gap:10px}
+#seek{flex:1;accent-color:var(--acc);height:24px}
+#time{font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums;white-space:nowrap}
+.empty{color:var(--dim);padding:36px 20px;text-align:center}
+#gate{position:fixed;inset:0;background:var(--bg);z-index:10;display:none;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;gap:14px;overflow-y:auto}
+#gate.show{display:flex}
+#gate h2{margin:0;font-size:20px}
+#gate p{color:var(--dim);margin:0;max-width:420px;font-size:14px}
+#gate form{width:100%;max-width:420px;display:flex;flex-direction:column;gap:10px;text-align:left}
+.err{color:#ff9d8a;font-size:14px}
+#toast{position:fixed;left:50%;bottom:calc(120px + var(--sab));transform:translateX(-50%);background:#33363d;border:1px solid var(--line);padding:9px 14px;border-radius:8px;font-size:14px;display:none;z-index:20;max-width:90vw;text-align:center}
+@media (min-width:820px){
+  #left{flex:0 0 400px;border-right:1px solid var(--line)}
+  #detail{position:static;display:flex;flex:1}
+  #back{display:none}
+}
+</style></head><body>
+<header>
+  <h1>Scene Browser</h1>
+  <button id="refresh" title="Reload the scene list and ratings from Drive">Refresh</button>
+  <button id="setupbtn" aria-label="Settings">⚙</button>
+</header>
+<main>
+  <section id="left">
+    <div id="filters">
+      <input type="search" id="q" placeholder="Search projects…" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <div class="chips">
+        <button class="chip on" data-f="all">All</button>
+        <button class="chip" data-f="star">★ Starred</button>
+        <button class="chip" data-f="notes">With notes</button>
+        <span class="count" id="count"></span>
+      </div>
+    </div>
+    <ul id="list" aria-label="Projects"></ul>
+  </section>
+  <section id="detail">
+    <div id="dhead"><button id="back">‹ Projects</button><span style="flex:1"></span><button id="dstar">☆ Star</button></div>
+    <div id="dbody"><div class="empty">Pick a project to hear its scenes.</div></div>
+  </section>
+</main>
+<div id="player">
+  <div class="top">
+    <button id="prev" aria-label="Previous scene">⏮</button>
+    <button id="pp" class="primary" aria-label="Play or pause">▶</button>
+    <button id="next" aria-label="Next scene">⏭</button>
+    <div id="now"><span>Nothing playing</span></div>
+  </div>
+  <div class="bot"><input type="range" id="seek" min="0" max="1000" value="0" aria-label="Position"><div id="time">0:00 / 0:00</div></div>
+</div>
+<audio id="au" preload="auto" playsinline></audio>
+<div id="toast"></div>
+<div id="gate">
+  <h2 id="gtitle">Scene Browser</h2>
+  <p id="gtext"></p>
+  <div class="err" id="gerr"></div>
+  <button class="primary" id="signin" style="display:none">Sign in with Google</button>
+  <form id="setup" style="display:none">
+    <label class="small" for="cid">Google client ID (ends in .apps.googleusercontent.com)</label>
+    <input type="text" id="cid" autocapitalize="off" autocomplete="off" spellcheck="false">
+    <label class="small" for="fid">Drive folder ID of the scenes folder</label>
+    <input type="text" id="fid" autocapitalize="off" autocomplete="off" spellcheck="false">
+    <button class="primary" type="submit">Save</button>
+    <button type="button" id="setupcancel">Cancel</button>
+  </form>
+</div>
+<script>
+"use strict";
+const $=s=>document.querySelector(s), au=$('#au');
+const LS={get:(k,d)=>{try{const v=localStorage.getItem('bsb.'+k);return v===null?d:JSON.parse(v)}catch(e){return d}},set:(k,v)=>{try{localStorage.setItem('bsb.'+k,JSON.stringify(v))}catch(e){}},del:k=>{try{localStorage.removeItem('bsb.'+k)}catch(e){}}};
+const SCOPE='https://www.googleapis.com/auth/drive';
+const API='https://www.googleapis.com/drive/v3/files', UP='https://www.googleapis.com/upload/drive/v3/files';
+const STATE_DIR='_scene-browser', STATE_NAME='stars-and-notes.json';
+const SILENT='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+let cfg={client:LS.get('client',''),folder:LS.get('folder','')};
+let token=null, tokenClient=null, tokenWaiters=[];
+let projects=[], view=[], sel=null, filter='all', cur=null, unlocked=false;
+let state={stars:{},notes:{}}, stateId=LS.get('stateId',''), saveChain=Promise.resolve();
+const blobs=new Map();
+
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt=t=>{if(!isFinite(t))return'0:00';t=Math.floor(t);return Math.floor(t/60)+':'+String(t%60).padStart(2,'0')};
+function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>t.style.display='none',3500)}
+// must match norm() in the desktop app (bitwig_scene_browser.py)
+function norm(n){let s=n.trim().replace(/(\.?\s*\d*bwproject)+$/i,'');s=s.replace(/[:\/\\]/g,'-').replace(/\?/g,' ');return s.replace(/\s+/g,' ').trim().toLowerCase()}
+
+/* ---------- sign-in ---------- */
+function gate(mode,msg){
+  const g=$('#gate');$('#gerr').textContent=msg||'';
+  $('#signin').style.display=mode==='signin'?'':'none';$('#setup').style.display=mode==='setup'?'':'none';
+  if(mode==='setup'){$('#gtitle').textContent='Set up';$('#gtext').textContent='Enter these once on this device. They are stored only in this browser.';$('#cid').value=cfg.client;$('#fid').value=cfg.folder;$('#setupcancel').style.display=cfg.client&&cfg.folder?'':'none'}
+  if(mode==='signin'){$('#gtitle').textContent='Scene Browser';$('#gtext').textContent='Sign in with the Google account that holds your scene MP3s.'}
+  if(mode==='load'){$('#gtitle').textContent='Loading…';$('#gtext').textContent=msg||'';$('#gerr').textContent=''}
+  g.classList.toggle('show',!!mode);
+}
+function initGis(){
+  if(tokenClient||!window.google||!google.accounts||!cfg.client)return !!tokenClient;
+  tokenClient=google.accounts.oauth2.initTokenClient({client_id:cfg.client,scope:SCOPE,
+    callback:r=>{const w=tokenWaiters;tokenWaiters=[];
+      if(r&&r.access_token){token=r.access_token;try{sessionStorage.setItem('bsb.tok',JSON.stringify({t:token,e:Date.now()+((+r.expires_in||3600)-120)*1000}))}catch(e){}w.forEach(x=>x.res())}
+      else w.forEach(x=>x.rej(new Error((r&&(r.error_description||r.error))||'Sign-in failed')))},
+    error_callback:e=>{const w=tokenWaiters;tokenWaiters=[];w.forEach(x=>x.rej(new Error(e&&e.message||'Sign-in was closed')))}});
+  return true;
+}
+function requestToken(){return new Promise((res,rej)=>{if(!initGis())return rej(new Error('Google sign-in has not loaded yet. Check your connection and try again.'));tokenWaiters.push({res,rej});tokenClient.requestAccessToken({prompt:''})})}
+function savedToken(){try{const o=JSON.parse(sessionStorage.getItem('bsb.tok')||'null');if(o&&o.e>Date.now()){token=o.t;return true}}catch(e){}return false}
+class AuthError extends Error{}
+async function gfetch(url,opts){
+  if(!token)throw new AuthError('Not signed in');
+  opts=opts||{};opts.headers=Object.assign({Authorization:'Bearer '+token},opts.headers||{});
+  const r=await fetch(url,opts);
+  if(r.status===401){token=null;try{sessionStorage.removeItem('bsb.tok')}catch(e){}throw new AuthError('Sign-in expired')}
+  if(!r.ok){let m='Google Drive error '+r.status;try{const j=await r.json();if(j.error&&j.error.message)m=j.error.message}catch(e){}throw new Error(m)}
+  return r;
+}
+function needSignin(msg){gate('signin',msg||'')}
+
+/* ---------- Drive: index ---------- */
+const SCENE_RE=/^(.+?) - (Scene (\d+)|Arrangement)(?: - part (\d+) of (\d+))?(?: \((128k)\))?( \(\d+\))?\.mp3$/i;
+function buildIndex(files){
+  const groups=new Map();
+  for(const [id,name] of files){
+    const m=SCENE_RE.exec(name);let proj,order,label,part,dup=false;
+    if(m){proj=m[1];if(m[3]){order=+m[3];label='Scene '+order}else{order=0;label='Arrangement'}part=+(m[4]||1);dup=!!m[7]}
+    else{if(!/\.mp3$/i.test(name))continue;proj=name.slice(0,-4);order=0;label='Audio';part=1}
+    const k=norm(proj);let g=groups.get(k);if(!g){g={key:k,name:proj,scenes:new Map()};groups.set(k,g)}
+    let sc=g.scenes.get(label);if(!sc){sc={label,order,parts:new Map()};g.scenes.set(label,sc)}
+    if(dup&&sc.parts.has(part))continue;
+    if(!sc.parts.has(part))sc.parts.set(part,id);
+  }
+  projects=[...groups.values()].map(g=>({key:g.key,name:g.name,scenes:[...g.scenes.values()]
+    .sort((a,b)=>(a.order===0)-(b.order===0)||a.order-b.order||a.label.localeCompare(b.label))
+    .map(s=>({label:s.label,ids:[...s.parts.keys()].sort((a,b)=>a-b).map(p=>s.parts.get(p))}))}))
+    .sort((a,b)=>a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+}
+async function fetchIndex(){
+  const out=[];let page='';
+  const q=encodeURIComponent("'"+cfg.folder+"' in parents and trashed=false and mimeType='audio/mpeg'");
+  do{
+    const r=await gfetch(API+'?q='+q+'&fields=nextPageToken,files(id,name)&pageSize=1000&orderBy=name'+(page?'&pageToken='+encodeURIComponent(page):''));
+    const j=await r.json();for(const f of j.files||[])out.push([f.id,f.name]);page=j.nextPageToken||'';
+    gate('load',out.length+' files…');
+  }while(page);
+  LS.set('index',{folder:cfg.folder,t:Date.now(),files:out});
+  return out;
+}
+
+/* ---------- Drive: stars and notes ---------- */
+async function findOne(q){const r=await gfetch(API+'?q='+encodeURIComponent(q)+'&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=5');const j=await r.json();return (j.files&&j.files[0])?j.files[0].id:''}
+async function locateState(create){
+  if(stateId)return stateId;
+  let dir=await findOne("'"+cfg.folder+"' in parents and name='"+STATE_DIR+"' and mimeType='application/vnd.google-apps.folder' and trashed=false");
+  if(!dir){if(!create)return '';
+    const r=await gfetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:STATE_DIR,mimeType:'application/vnd.google-apps.folder',parents:[cfg.folder]})});dir=(await r.json()).id}
+  let id=await findOne("'"+dir+"' in parents and name='"+STATE_NAME+"' and trashed=false");
+  if(!id){if(!create)return '';
+    const r=await gfetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:STATE_NAME,mimeType:'application/json',parents:[dir]})});id=(await r.json()).id}
+  stateId=id;LS.set('stateId',id);return id;
+}
+async function readState(){
+  const id=await locateState(false);if(!id)return {stars:{},notes:{}};
+  try{const r=await gfetch(API+'/'+id+'?alt=media');const t=await r.text();const j=t.trim()?JSON.parse(t):{};return {stars:j.stars||{},notes:j.notes||{},_rest:j}}
+  catch(e){if(e instanceof AuthError)throw e;if(/not found/i.test(e.message)){stateId='';LS.del('stateId');return {stars:{},notes:{}}}throw e}
+}
+function mutate(fn){ // apply locally now; then read-modify-write the shared file so the other computers' changes survive
+  fn(state);
+  saveChain=saveChain.catch(()=>{}).then(async()=>{
+    const fresh=await readState();fn(fresh);
+    const id=await locateState(true);
+    const body=Object.assign({},fresh._rest||{},{stars:fresh.stars,notes:fresh.notes});
+    await gfetch(UP+'/'+id+'?uploadType=media',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body,null,1)});
+    state=fresh;
+  });
+  saveChain.then(()=>{const s=$('#saved');if(s)s.textContent='Saved to Drive'},e=>{if(e instanceof AuthError)needSignin('Sign in again to save your change.');else toast('Could not save: '+e.message)});
+  return saveChain;
+}
+
+/* ---------- list + detail ---------- */
+function renderList(){
+  const q=$('#q').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  view=projects.filter(p=>{if(filter==='star'&&!state.stars[p.key])return false;if(filter==='notes'&&!state.notes[p.key])return false;const n=p.name.toLowerCase();return q.every(w=>n.includes(w))});
+  $('#count').textContent=view.length+' of '+projects.length;
+  $('#list').innerHTML=view.map((p,i)=>'<li class="'+(sel&&sel.key===p.key?'sel':'')+'"><button class="star '+(state.stars[p.key]?'on':'')+'" data-star="'+i+'" aria-label="Star" aria-pressed="'+(!!state.stars[p.key])+'">★</button>'+
+    '<button class="row" data-i="'+i+'"><span class="nm">'+esc(p.name)+'</span><span class="ct">'+(state.notes[p.key]?'✎ ':'')+p.scenes.length+'</span></button></li>').join('')||'<div class="empty">No projects match.</div>';
+}
+function renderDetail(){
+  const p=sel;if(!p){$('#dbody').innerHTML='<div class="empty">Pick a project to hear its scenes.</div>';$('#dstar').style.visibility='hidden';return}
+  $('#dstar').style.visibility='';$('#dstar').textContent=state.stars[p.key]?'★ Starred':'☆ Star';
+  $('#dbody').innerHTML='<h2>'+esc(p.name)+'</h2><div class="scenes">'+p.scenes.map((s,i)=>'<button class="scene" data-s="'+i+'"><span class="ic">▶</span>'+esc(s.label)+(s.ids.length>1?'<small>'+s.ids.length+' parts</small>':'')+'</button>').join('')+'</div>'+
+    '<label class="small" for="note">Your notes for this project</label><textarea id="note" placeholder="e.g. Scene 3 is the one — build on it">'+esc(state.notes[p.key]||'')+'</textarea><div class="saved" id="saved"></div>';
+  markPlaying();
+}
+function markPlaying(){
+  document.querySelectorAll('.scene').forEach(b=>{const on=cur&&sel&&cur.p.key===sel.key&&+b.dataset.s===cur.si;b.classList.toggle('playing',!!on);b.querySelector('.ic').textContent=on?(cur.loading?'…':(au.paused?'▶':'♪')):'▶'});
+  $('#pp').textContent=cur&&cur.loading?'…':(au.paused?'▶':'⏸');
+}
+function openProject(p,autoplay){sel=p;document.body.classList.add('open');renderList();renderDetail();$('#dbody').scrollTop=0;if(autoplay&&p.scenes.length)play(p,0,0)}
+function setStar(p){const on=!state.stars[p.key];mutate(s=>{if(on)s.stars[p.key]=1;else delete s.stars[p.key]});renderList();if(sel&&sel.key===p.key)$('#dstar').textContent=on?'★ Starred':'☆ Star'}
+
+/* ---------- playback ---------- */
+async function blobUrl(id){
+  if(blobs.has(id)){const u=blobs.get(id);blobs.delete(id);blobs.set(id,u);return u}
+  const r=await gfetch(API+'/'+id+'?alt=media');const u=URL.createObjectURL(await r.blob());
+  blobs.set(id,u);
+  while(blobs.size>10){const k=blobs.keys().next().value;if(cur&&cur.id===k)break;URL.revokeObjectURL(blobs.get(k));blobs.delete(k)}
+  return u;
+}
+function nextOf(c){if(!c)return null;const s=c.p.scenes[c.si];if(c.part+1<s.ids.length)return {p:c.p,si:c.si,part:c.part+1};if(c.si+1<c.p.scenes.length)return {p:c.p,si:c.si+1,part:0};return null}
+async function play(p,si,part){
+  const s=p.scenes[si];if(!s)return;
+  if(!unlocked){unlocked=true;try{au.src=SILENT;au.play().catch(()=>{})}catch(e){}}  // lets phones start audio after the download finishes
+  const me=cur={p,si,part:part||0,id:s.ids[part||0],loading:true};
+  $('#now').innerHTML=esc(s.label)+(s.ids.length>1?' <span>part '+(me.part+1)+'/'+s.ids.length+'</span>':'')+' <span>· '+esc(p.name)+'</span>';
+  markPlaying();
+  try{
+    const u=await blobUrl(me.id);if(cur!==me)return;
+    me.loading=false;au.src=u;await au.play().catch(()=>{});markPlaying();
+    if('mediaSession' in navigator){try{navigator.mediaSession.metadata=new MediaMetadata({title:s.label,artist:p.name,album:'Bitwig scenes'})}catch(e){}}
+    const n=nextOf(me);if(n)blobUrl(n.p.scenes[n.si].ids[n.part]).catch(()=>{});
+  }catch(e){if(cur!==me)return;me.loading=false;markPlaying();if(e instanceof AuthError)needSignin('Sign in again to keep listening.');else toast('Could not load this scene: '+e.message)}
+}
+function step(d){const p=cur?cur.p:sel;if(!p)return;const si=cur?cur.si+d:0;if(si<0||si>=p.scenes.length)return;play(p,si,0)}
+function toggle(){if(!cur){if(sel&&sel.scenes.length)play(sel,0,0);return}if(cur.loading)return;au.paused?au.play().catch(()=>{}):au.pause()}
+au.addEventListener('ended',()=>{const n=nextOf(cur);if(n)play(n.p,n.si,n.part);else markPlaying()});
+['play','pause'].forEach(e=>au.addEventListener(e,markPlaying));
+let seeking=false;
+au.addEventListener('timeupdate',()=>{if(!seeking&&au.duration)$('#seek').value=Math.round(au.currentTime/au.duration*1000);$('#time').textContent=fmt(au.currentTime)+' / '+fmt(au.duration)});
+$('#seek').addEventListener('input',()=>{seeking=true});
+$('#seek').addEventListener('change',e=>{if(au.duration&&isFinite(au.duration))au.currentTime=e.target.value/1000*au.duration;seeking=false});
+$('#pp').onclick=toggle;$('#prev').onclick=()=>step(-1);$('#next').onclick=()=>step(1);
+if('mediaSession' in navigator){try{navigator.mediaSession.setActionHandler('previoustrack',()=>step(-1));navigator.mediaSession.setActionHandler('nexttrack',()=>step(1));navigator.mediaSession.setActionHandler('play',()=>au.play());navigator.mediaSession.setActionHandler('pause',()=>au.pause())}catch(e){}}
+
+/* ---------- events ---------- */
+$('#list').addEventListener('click',e=>{const st=e.target.closest('[data-star]');if(st){setStar(view[+st.dataset.star]);return}const r=e.target.closest('[data-i]');if(r)openProject(view[+r.dataset.i],true)});
+$('#back').onclick=()=>{document.body.classList.remove('open')};
+$('#dstar').onclick=()=>{if(sel)setStar(sel)};
+$('#dbody').addEventListener('click',e=>{const b=e.target.closest('.scene');if(!b||!sel)return;const si=+b.dataset.s;if(cur&&cur.p.key===sel.key&&cur.si===si)toggle();else play(sel,si,0)});
+let noteT=null;
+$('#dbody').addEventListener('input',e=>{if(e.target.id!=='note'||!sel)return;const p=sel,v=e.target.value;$('#saved').textContent='';clearTimeout(noteT);
+  noteT=setTimeout(()=>{$('#saved').textContent='Saving…';mutate(s=>{if(v.trim())s.notes[p.key]=v;else delete s.notes[p.key]})},900)});
+$('#q').addEventListener('input',renderList);
+document.querySelectorAll('.chip[data-f]').forEach(c=>c.onclick=()=>{filter=c.dataset.f;document.querySelectorAll('.chip[data-f]').forEach(x=>x.classList.toggle('on',x===c));renderList()});
+$('#refresh').onclick=()=>start(true);
+$('#setupbtn').onclick=()=>gate('setup');
+$('#setupcancel').onclick=()=>gate(null);
+$('#setup').addEventListener('submit',e=>{e.preventDefault();const c=$('#cid').value.trim(),f=$('#fid').value.trim().replace(/^.*\/folders\/([^/?]+).*$/,'$1');
+  if(!/\.apps\.googleusercontent\.com$/.test(c))return gate('setup','That does not look like a Google client ID.');
+  if(!/^[\w-]{10,}$/.test(f))return gate('setup','That does not look like a Drive folder ID.');
+  if(c!==cfg.client){tokenClient=null;token=null;try{sessionStorage.removeItem('bsb.tok')}catch(x){}}
+  if(f!==cfg.folder){LS.del('index');LS.del('stateId');stateId=''}
+  cfg={client:c,folder:f};LS.set('client',c);LS.set('folder',f);start(false)});
+$('#signin').onclick=async()=>{$('#signin').disabled=true;try{await requestToken();await start(false)}catch(e){gate('signin',e.message)}$('#signin').disabled=false};
+
+/* ---------- start ---------- */
+async function start(force){
+  if(!cfg.client||!cfg.folder)return gate('setup');
+  if(!token&&!savedToken())return needSignin();
+  try{
+    let idx=LS.get('index',null);
+    if(force||!idx||idx.folder!==cfg.folder){gate('load','Reading your scenes from Drive…');idx={files:await fetchIndex()}}
+    buildIndex(idx.files);
+    try{state=await readState()}catch(e){if(e instanceof AuthError)throw e;toast('Could not read stars and notes: '+e.message)}
+    gate(null);
+    if(sel)sel=projects.find(p=>p.key===sel.key)||null;
+    renderList();renderDetail();
+    if(force)toast(projects.length+' projects');
+    if(!projects.length)$('#list').innerHTML='<div class="empty">No MP3s found in that folder. Check the folder ID in ⚙.</div>';
+  }catch(e){if(e instanceof AuthError)needSignin();else gate('signin',e.message)}
+}
+(function boot(){
+  const u=new URL(location.href);let ch=false;  // optional one-time setup link: ?client=…&folder=…
+  for(const k of ['client','folder']){const v=u.searchParams.get(k);if(v){cfg[k]=v.trim();LS.set(k,cfg[k]);u.searchParams.delete(k);ch=true}}
+  if(ch)history.replaceState(null,'',u.pathname+(u.search||''));
+  renderDetail();
+  const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.async=true;s.onload=initGis;s.onerror=()=>toast('Could not load Google sign-in. Check your connection.');document.head.appendChild(s);
+  start(false);
+})();
+</script></body></html>
